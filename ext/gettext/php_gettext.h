@@ -42,6 +42,18 @@ PHP_NAMED_FUNCTION(zif_dngettext);
 #if HAVE_DCNGETTEXT
 PHP_NAMED_FUNCTION(zif_dcngettext);
 #endif
+PHP_NAMED_FUNCTION(zif_pgettext);
+PHP_NAMED_FUNCTION(zif_dpgettext);
+PHP_NAMED_FUNCTION(zif_dcpgettext);
+#if HAVE_NGETTEXT
+PHP_NAMED_FUNCTION(zif_npgettext);
+#endif
+#if HAVE_DNGETTEXT
+PHP_NAMED_FUNCTION(zif_dnpgettext);
+#endif
+#if HAVE_DCNGETTEXT
+PHP_NAMED_FUNCTION(zif_dcnpgettext);
+#endif
 #if HAVE_BIND_TEXTDOMAIN_CODESET
 PHP_NAMED_FUNCTION(zif_bind_textdomain_codeset);
 #endif

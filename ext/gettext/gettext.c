@@ -82,6 +82,54 @@ ZEND_BEGIN_ARG_INFO(arginfo_dcngettext, 0)
 ZEND_END_ARG_INFO()
 #endif
 
+ZEND_BEGIN_ARG_INFO(arginfo_pgettext, 0)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_dpgettext, 0)
+	ZEND_ARG_INFO(0, domain)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_dcpgettext, 0)
+	ZEND_ARG_INFO(0, domain)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid)
+	ZEND_ARG_INFO(0, category)
+ZEND_END_ARG_INFO()
+
+#if HAVE_NGETTEXT
+ZEND_BEGIN_ARG_INFO(arginfo_npgettext, 0)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid1)
+	ZEND_ARG_INFO(0, msgid2)
+	ZEND_ARG_INFO(0, count)
+ZEND_END_ARG_INFO()
+#endif
+
+#if HAVE_DNGETTEXT
+ZEND_BEGIN_ARG_INFO(arginfo_dnpgettext, 0)
+	ZEND_ARG_INFO(0, domain)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid1)
+	ZEND_ARG_INFO(0, msgid2)
+	ZEND_ARG_INFO(0, count)
+ZEND_END_ARG_INFO()
+#endif
+
+#if HAVE_DCNGETTEXT
+ZEND_BEGIN_ARG_INFO(arginfo_dcnpgettext, 0)
+	ZEND_ARG_INFO(0, domain)
+	ZEND_ARG_INFO(0, msgctxt)
+	ZEND_ARG_INFO(0, msgid1)
+	ZEND_ARG_INFO(0, msgid2)
+	ZEND_ARG_INFO(0, count)
+	ZEND_ARG_INFO(0, category)
+ZEND_END_ARG_INFO()
+#endif
+
 #if HAVE_BIND_TEXTDOMAIN_CODESET
 ZEND_BEGIN_ARG_INFO(arginfo_bind_textdomain_codeset, 0)
 	ZEND_ARG_INFO(0, domain)
@@ -109,10 +157,23 @@ const zend_function_entry php_gettext_functions[] = {
 #if HAVE_DCNGETTEXT
 	PHP_NAMED_FE(dcngettext,		zif_dcngettext,		arginfo_dcngettext)
 #endif
+	PHP_NAMED_FE(pgettext,			zif_pgettext,		arginfo_pgettext)
+	PHP_NAMED_FE(dpgettext,			zif_dpgettext,		arginfo_dpgettext)
+	PHP_NAMED_FE(dcpgettext,		zif_dcpgettext,		arginfo_dcpgettext)
+#if HAVE_NGETTEXT
+	PHP_NAMED_FE(npgettext,			zif_npgettext,		arginfo_npgettext)
+#endif
+#if HAVE_DNGETTEXT
+	PHP_NAMED_FE(dnpgettext,		zif_dnpgettext,		arginfo_dnpgettext)
+#endif
+#if HAVE_DCNGETTEXT
+	PHP_NAMED_FE(dcnpgettext,		zif_dcnpgettext,	arginfo_dcnpgettext)
+#endif
+
 #if HAVE_BIND_TEXTDOMAIN_CODESET
 	PHP_NAMED_FE(bind_textdomain_codeset,	zif_bind_textdomain_codeset,	arginfo_bind_textdomain_codeset)
 #endif
-    PHP_FE_END
+	{NULL,NULL,NULL} /* XXX Was PHP_FE_END but that was undefined in my environment */
 };
 /* }}} */
 
@@ -273,7 +334,6 @@ PHP_NAMED_FUNCTION(zif_bindtextdomain)
 	RETURN_STRING(retval, 1);
 }
 /* }}} */
-
 #if HAVE_NGETTEXT
 /* {{{ proto string ngettext(string MSGID1, string MSGID2, int N)
    Plural version of gettext() */
@@ -349,6 +409,211 @@ PHP_NAMED_FUNCTION(zif_dcngettext)
 	if (msgstr) {
 		RETVAL_STRING(msgstr, 1);
 	}
+}
+/* }}} */
+#endif
+
+/* Rewritten from idea taken from gettext.h file */
+
+#define GLUE "\004"
+
+static const char* pgettext_aux(
+		const char *domain,
+		const char *msgctxtid,
+		const char *msgid,
+		int category
+		) {
+	const char *translation = dcgettext( domain, msgctxtid, category );
+	if( translation == msgctxtid ) {
+		return msgid;
+	} else {
+		return translation;
+	}
+}
+
+static const char* npgettext_aux(
+		const char *domain,
+		const char *msgctxtid,
+		const char *msgid1,
+		const char *msgid2,
+		unsigned long int n,
+		int category
+		) {
+	const char *translation = dcngettext( domain, msgctxtid, msgid2, n, category );
+	if( translation == msgctxtid || translation == msgid2 ) {
+		return ( n == 1 ? msgid1 : msgid2 );
+	} else {
+		return translation;
+	}
+}
+
+/* {{{ proto string pgettext(string msgctxt, string msgid)
+   Return the translation of msgid in the msgctxt context, for the current domain, or msgid unaltered if a translation does not exist */
+PHP_NAMED_FUNCTION(zif_pgettext)
+{
+	char *msgctxt, *msgid, msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int msgctxt_len, msgid_len;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss", &msgctxt, &msgctxt_len, &msgid, &msgid_len) == FAILURE) {
+		return;
+	}
+
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid", msgid_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid+msgctxt+1", msgid_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid,msgid_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = pgettext_aux( NULL, msgctxtid, msgid, LC_MESSAGES );
+
+	RETURN_STRING(msgstr, 1);
+}
+/* }}} */
+
+/* {{{ proto string dpgettext(string domain_name, string msgctxt, string msgid)
+   Return the translation of msgid in the msgctxt context for domain_name, or msgid unaltered if a translation does not exist */
+PHP_NAMED_FUNCTION(zif_dpgettext)
+{
+	char *domain, *msgctxt, *msgid, msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int domain_len, msgctxt_len, msgid_len;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sss", &domain, &domain_len, &msgctxt, &msgctxt_len, &msgid, &msgid_len) == FAILURE)	{
+		return;
+	}
+
+	PHP_GETTEXT_DOMAIN_LENGTH_CHECK
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid", msgid_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid+msgctxt+1", msgid_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid,msgid_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = pgettext_aux( domain, msgctxtid, msgid, LC_MESSAGES );
+
+	RETURN_STRING(msgstr, 1);
+}
+/* }}} */
+
+/* {{{ proto string dcpgettext(string domain_name, string msgctxt, string msgid, long category)
+   Return the translation of msgid in the msgctxt context for domain_name and category, or msgid unaltered if a translation does not exist */
+PHP_NAMED_FUNCTION(zif_dcpgettext)
+{
+	char *domain, *msgctxt, *msgid,  msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int domain_len, msgctxt_len, msgid_len;
+	long category;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sssl", &domain, &domain_len, &msgctxt, &msgctxt_len, &msgid, &msgid_len, &category) == FAILURE) {
+		return;
+	}
+
+	PHP_GETTEXT_DOMAIN_LENGTH_CHECK
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid", msgid_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid+msgctxt+1", msgid_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid,msgid_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = pgettext_aux( domain, msgctxtid, msgid, category );
+
+	RETURN_STRING(msgstr, 1);
+}
+/* }}} */
+
+#if HAVE_NGETTEXT
+/* {{{ proto string npgettext(string msgctxt, string msgid1, string msgid2, int n)
+   Plural version of pgettext() */
+PHP_NAMED_FUNCTION(zif_npgettext)
+{
+	char *msgctxt, *msgid1, *msgid2, msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int msgctxt_len, msgid1_len, msgid2_len;
+	long count;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "sssl", &msgid1, &msgid1_len, &msgctxt, &msgctxt_len, &msgid2, &msgid2_len, &count) == FAILURE) {
+		return;
+	}
+
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1", msgid1_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid2", msgid2_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1+msgctxt+1", msgid1_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid1,msgid1_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = npgettext_aux( NULL, msgctxtid, msgid1, msgid2, count, LC_MESSAGES );
+
+	RETVAL_STRING(msgstr, 1);
+}
+/* }}} */
+#endif
+
+#if HAVE_DNGETTEXT
+/* {{{ proto string dnpgettext (string domain, string msgctxt, string msgid1, string msgid2, int count)
+   Plural version of dpgettext() */
+PHP_NAMED_FUNCTION(zif_dnpgettext)
+{
+	char *domain, *msgctxt, *msgid1, *msgid2, msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int domain_len, msgctxt_len, msgid1_len, msgid2_len;
+	long count;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssssl", &domain, &domain_len, &msgctxt, &msgctxt_len,
+		&msgid1, &msgid1_len, &msgid2, &msgid2_len, &count) == FAILURE) {
+		return;
+	}
+
+	PHP_GETTEXT_DOMAIN_LENGTH_CHECK
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1", msgid1_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid2", msgid2_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1+msgctxt+1", msgid1_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid1,msgid1_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = npgettext_aux( domain, msgctxtid, msgid1, msgid2, count, LC_MESSAGES );
+
+	RETVAL_STRING(msgstr, 1);
+}
+/* }}} */
+#endif
+
+#if HAVE_DCNGETTEXT
+/* {{{ proto string dcnpgettext (string domain, string msgctxt, string msgid1, string msgid2, int n, int category)
+   Plural version of dcpgettext() */
+PHP_NAMED_FUNCTION(zif_dcnpgettext)
+{
+	char *domain, *msgctxt, *msgid1, *msgid2, msgctxtid[PHP_GETTEXT_MAX_MSGID_LENGTH+1];
+	const char *msgstr;
+	int domain_len, msgctxt_len, msgid1_len, msgid2_len;
+	long count, category;
+
+	RETVAL_FALSE;
+
+	if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ssssll", &domain, &domain_len, &msgctxt, &msgctxt_len,
+		&msgid1, &msgid1_len, &msgid2, &msgid2_len, &count, &category) == FAILURE) {
+		return;
+	}
+
+	PHP_GETTEXT_DOMAIN_LENGTH_CHECK
+	PHP_GETTEXT_LENGTH_CHECK("msgctxt", msgctxt_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1", msgid1_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid2", msgid2_len)
+	PHP_GETTEXT_LENGTH_CHECK("msgid1+msgctxt+1", msgid1_len+msgctxt_len+1)
+	strncat(msgctxtid,msgid1,msgid1_len);
+	strncat(msgctxtid,GLUE,1);
+	strncat(msgctxtid,msgctxt,msgctxt_len);
+
+	msgstr = npgettext_aux( domain, msgctxtid, msgid1, msgid2, count, category );
+
+	RETVAL_STRING(msgstr, 1);
 }
 /* }}} */
 #endif
